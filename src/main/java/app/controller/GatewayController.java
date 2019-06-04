@@ -4,6 +4,7 @@ import app.model.MeasurementRequest;
 import org.json.JSONObject;
 import org.springframework.http.*;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestTemplate;
 
 import java.util.Arrays;
@@ -17,7 +18,7 @@ public class GatewayController {
             "https://monitor-prodd.herokuapp.com/",
             "https://monitor2-prodd.herokuapp.com/"
     );
-    static private final String authenticationService = ""; // TODO: fill correct address
+    static private final String authenticationService = "https://auth-prodd.herokuapp.com/";
 
     static private final String HOSTS = "hosts";
     static private final String MEASUREMENTS = "measurements";
@@ -48,11 +49,11 @@ public class GatewayController {
     @PostMapping("/" + MEASUREMENTS)
     public ResponseEntity<String> createMeasurement(@RequestBody MeasurementRequest request) {
         ResponseEntity<String> authenticationResponse = authenticate(request.getToken());
-        JSONObject obj = new JSONObject(authenticationResponse.getBody());
-        String user = obj.getString("login");
-
         ResponseEntity<String> response;
+
         if (authenticationResponse.getStatusCode() == HttpStatus.OK) {
+            JSONObject obj = new JSONObject(authenticationResponse.getBody());
+            String user = obj.getString("login");
             response = new ResponseEntity<>(queryPostAllMonitors(request.toJson(), user), HttpStatus.CREATED);
         }
         else if (authenticationResponse.getStatusCode() == HttpStatus.NOT_FOUND) {
@@ -70,11 +71,16 @@ public class GatewayController {
             @PathVariable(value = "sensor_id") String sensorId,
             @RequestBody String token) {
         ResponseEntity<String> authenticationResponse = authenticate(token);
-        JSONObject obj = new JSONObject(authenticationResponse.getBody());
-        String user = obj.getString("login");
 
-        if (userToMeasurement.get(user).equals(sensorId)) {
-            return queryDeleteAllMonitors();
+        if (authenticationResponse.getStatusCode() == HttpStatus.OK) {
+            JSONObject obj = new JSONObject(authenticationResponse.getBody());
+            String user = obj.getString("login");
+
+            if (userToMeasurement.get(user).equals(sensorId)) {
+                return queryDeleteAllMonitors();
+            }
+            else
+                return new ResponseEntity<>(HttpStatus.UNAUTHORIZED);
         }
         else
             return new ResponseEntity<>(HttpStatus.UNAUTHORIZED);
@@ -83,8 +89,25 @@ public class GatewayController {
     private ResponseEntity<String> authenticate(String token) {
         String authenticationUri = authenticationService + "/users/auth?authToken=" + token;
         RestTemplate query = new RestTemplate();
+        HttpHeaders httpHeaders = new HttpHeaders();
+        httpHeaders.add(HttpHeaders.CONTENT_TYPE, "application/json");
+        HttpEntity<String> entity = new HttpEntity<>("", httpHeaders);
 
-        return query.getForEntity(authenticationUri, String.class);
+        System.out.println("DBG: authentication querying get on " + authenticationUri);
+        ResponseEntity<String> response;
+        try {
+            response = query.exchange(
+                    authenticationUri,
+                    HttpMethod.GET,
+                    entity,
+                    String.class
+            );
+        } catch (HttpClientErrorException ex) {
+            System.out.println("ERR: authentication query on " + authenticationUri + " returned " + ex.getMessage());
+            response =  new ResponseEntity<>(ex.getStatusCode());
+        }
+
+        return response;
     }
 
     private ResponseEntity<String> queryGetAllMonitors(String uri) {
@@ -92,9 +115,15 @@ public class GatewayController {
         RestTemplate request = new RestTemplate();
 
         for (String monitor : monitors) {
-            System.out.println("DBG: querying " + monitor + uri);
+            System.out.println("DBG: querying get on " + monitor + uri);
 
-            ResponseEntity<String> response = request.getForEntity(monitor + uri, String.class);
+            ResponseEntity<String> response;
+            try {
+                response = request.getForEntity(monitor + uri, String.class);
+            } catch (HttpClientErrorException ex) {
+                System.out.println("ERR: query on " + monitor + uri + " returned " + ex.getMessage());
+                response = new ResponseEntity<>(ex.getStatusCode());
+            }
             result += response.getBody();
 
             System.out.println("DBG: response body [" + response.getBody() + "]");
