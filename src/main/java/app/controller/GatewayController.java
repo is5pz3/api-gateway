@@ -25,28 +25,32 @@ public class GatewayController {
 
     private Map<String, String> userToMeasurement = new TreeMap<>();
 
-    @GetMapping("/" + HOSTS)
+    @GetMapping(value = "/" + HOSTS, produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<String> getHosts(@RequestParam("hostName") String hostName) {
         return queryGetAllMonitors(HOSTS + "?hostName=" + hostName);
     }
 
-    @GetMapping("/" + MEASUREMENTS)
+    @GetMapping(value = "/" + MEASUREMENTS, produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<String> getAllMeasurements() {
         return queryGetAllMonitors(MEASUREMENTS);
     }
 
-    @GetMapping("/" + MEASUREMENTS + "/{sensor_id}")
+    @GetMapping(value = "/" + MEASUREMENTS + "/{sensor_id}", produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<String> getSensorMeasurements(
             @PathVariable(value = "sensor_id") String sensorId,
             @RequestParam(value = "data_count", defaultValue = "10") String dataCount,
             @RequestParam(value = "since", required = false) String since,
             @RequestParam(value = "to", required = false) String to) {
-        return queryGetAllMonitors(
-                MEASUREMENTS + "/" + sensorId + "?data_count=" + dataCount + "&since=" + since + "&to=" + to
-        );
+        String uri = MEASUREMENTS + "/" + sensorId + "?data_count=" + dataCount;
+        if (since != null)
+            uri += "&since=" + since;
+        if (to != null)
+            uri += "&to=" + to;
+
+        return queryGetAllMonitors(uri);
     }
 
-    @PostMapping("/" + MEASUREMENTS)
+    @PostMapping(value = "/" + MEASUREMENTS, produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<String> createMeasurement(@RequestBody MeasurementRequest request) {
         ResponseEntity<String> authenticationResponse = authenticate(request.getToken());
         ResponseEntity<String> response;
@@ -66,7 +70,7 @@ public class GatewayController {
         return response;
     }
 
-    @DeleteMapping("/" + MEASUREMENTS + "/{sensor_id}")
+    @DeleteMapping(value = "/" + MEASUREMENTS + "/{sensor_id}", produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<String> deleteMeasurement(
             @PathVariable(value = "sensor_id") String sensorId,
             @RequestBody String token) {
