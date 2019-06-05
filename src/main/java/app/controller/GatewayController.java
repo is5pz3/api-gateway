@@ -170,6 +170,7 @@ public class GatewayController {
 
     private ResponseEntity<String> queryDeleteAllMonitors() {
         String result = "";
+        result = "";
         RestTemplate query = new RestTemplate();
         HttpEntity<String> entity = new HttpEntity<>("", new HttpHeaders());
 
