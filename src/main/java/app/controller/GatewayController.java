@@ -1,16 +1,17 @@
 package app.controller;
 
+import app.model.Measurement;
 import app.model.MeasurementRequest;
+import app.model.SensorMeasurements;
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 import org.json.JSONObject;
 import org.springframework.http.*;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestTemplate;
 
-import java.util.Arrays;
-import java.util.List;
-import java.util.Map;
-import java.util.TreeMap;
+import java.util.*;
 
 @RestController
 public class GatewayController {
@@ -47,7 +48,7 @@ public class GatewayController {
         if (to != null)
             uri += "&to=" + to;
 
-        return queryGetAllMonitors(uri);
+        return queryGetAllSensorMeasurements(uri);
     }
 
     @PostMapping(value = "/" + MEASUREMENTS, produces = MediaType.APPLICATION_JSON_VALUE)
@@ -115,8 +116,9 @@ public class GatewayController {
     }
 
     private ResponseEntity<String> queryGetAllMonitors(String uri) {
-        String result = "";
+        Gson gson = new Gson();
         RestTemplate request = new RestTemplate();
+        List<Measurement> measurements = new ArrayList<>();
 
         for (String monitor : monitors) {
             System.out.println("DBG: querying get on " + monitor + uri);
@@ -128,13 +130,41 @@ public class GatewayController {
                 System.out.println("ERR: query on " + monitor + uri + " returned " + ex.getMessage());
                 response = new ResponseEntity<>(ex.getStatusCode());
             }
-            result += response.getBody();
+
+            measurements.addAll(Arrays.asList(gson.fromJson(response.getBody(), Measurement[].class)));
 
             System.out.println("DBG: response body [" + response.getBody() + "]");
             System.out.println("DBG: response status [" + response.getStatusCode() + "]");
         }
 
-        return new ResponseEntity<>(result, HttpStatus.OK);
+
+        return new ResponseEntity<>(gson.toJson(measurements), HttpStatus.OK);
+    }
+
+    private ResponseEntity<String> queryGetAllSensorMeasurements(String uri) {
+        Gson gson = new GsonBuilder().serializeNulls().create();
+        RestTemplate request = new RestTemplate();
+        List<SensorMeasurements> measurement = new ArrayList<>();
+
+        for (String monitor : monitors) {
+            System.out.println("DBG: querying get on " + monitor + uri);
+
+            ResponseEntity<String> response;
+            try {
+                response = request.getForEntity(monitor + uri, String.class);
+            } catch (HttpClientErrorException ex) {
+                System.out.println("ERR: query on " + monitor + uri + " returned " + ex.getMessage());
+                response = new ResponseEntity<>(ex.getStatusCode());
+            }
+
+            measurement.add(gson.fromJson(response.getBody(), SensorMeasurements.class));
+
+            System.out.println("DBG: response body [" + response.getBody() + "]");
+            System.out.println("DBG: response status [" + response.getStatusCode() + "]");
+        }
+
+        measurement.removeIf(Objects::isNull);
+        return new ResponseEntity<>(gson.toJson(measurement.size() != 0 ? measurement.get(0) : new SensorMeasurements()), HttpStatus.OK);
     }
 
     private String queryPostAllMonitors(String requestBody, String user) {
@@ -170,7 +200,6 @@ public class GatewayController {
 
     private ResponseEntity<String> queryDeleteAllMonitors() {
         String result = "";
-        result = "";
         RestTemplate query = new RestTemplate();
         HttpEntity<String> entity = new HttpEntity<>("", new HttpHeaders());
 
