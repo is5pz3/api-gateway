@@ -74,18 +74,11 @@ public class GatewayController {
     @DeleteMapping(value = "/" + MEASUREMENTS + "/{sensor_id}", produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<String> deleteMeasurement(
             @PathVariable(value = "sensor_id") String sensorId,
-            @RequestBody String token) {
+            @RequestParam String token) {
         ResponseEntity<String> authenticationResponse = authenticate(token);
 
         if (authenticationResponse.getStatusCode() == HttpStatus.OK) {
-            JSONObject obj = new JSONObject(authenticationResponse.getBody());
-            String user = obj.getString("login");
-
-            if (userToMeasurement.get(user).equals(sensorId)) {
-                return queryDeleteAllMonitors();
-            }
-            else
-                return new ResponseEntity<>(HttpStatus.UNAUTHORIZED);
+            return queryDeleteAllMonitors(sensorId, token);
         }
         else
             return new ResponseEntity<>(HttpStatus.UNAUTHORIZED);
@@ -177,28 +170,35 @@ public class GatewayController {
         for (String monitor : monitors) {
             System.out.println("DBG: querying post on " + monitor + MEASUREMENTS);
 
-            ResponseEntity<String> response = query.exchange(
-                    monitor + MEASUREMENTS,
-                    HttpMethod.POST,
-                    entity,
-                    String.class
-            );
-            result += response.getBody();
+            ResponseEntity<String> response = null;
 
-            if (response.getStatusCode() == HttpStatus.CREATED) {
-                JSONObject obj = new JSONObject(requestBody);
-                String sensorId = obj.getString("sensor_id");
-                userToMeasurement.put(user, sensorId);
+            try {
+                response = query.exchange(
+                        monitor + MEASUREMENTS,
+                        HttpMethod.POST,
+                        entity,
+                        String.class
+                );
+                result += response.getBody();
+
+                if (response.getStatusCode() == HttpStatus.CREATED) {
+                    JSONObject obj = new JSONObject(requestBody);
+                    String sensorId = obj.getString("sensor_id");
+                    userToMeasurement.put(user, sensorId);
+                }
+
+                System.out.println("DBG: response body [" + response.getBody() + "]");
+                System.out.println("DBG: response status [" + response.getStatusCode() + "]");
+            } catch (Exception e) {
+
             }
 
-            System.out.println("DBG: response body [" + response.getBody() + "]");
-            System.out.println("DBG: response status [" + response.getStatusCode() + "]");
         }
 
         return result;
     }
 
-    private ResponseEntity<String> queryDeleteAllMonitors() {
+    private ResponseEntity<String> queryDeleteAllMonitors(String sensorId, String token) {
         String result = "";
         RestTemplate query = new RestTemplate();
         HttpEntity<String> entity = new HttpEntity<>("", new HttpHeaders());
@@ -206,19 +206,26 @@ public class GatewayController {
         for (String monitor : monitors) {
             System.out.println("DBG: querying delete on " + monitor + MEASUREMENTS);
 
-            ResponseEntity<String> response = query.exchange(
-                    monitor + MEASUREMENTS,
-                    HttpMethod.DELETE,
-                    entity,
-                    String.class
-            );
-            //query.delete(monitor + MEASUREMENTS);
-            result += response.getBody();
+            try {
+                ResponseEntity<String> response = query.exchange(
+                        monitor + MEASUREMENTS + "/" + sensorId + "?token=" + token,
+                        HttpMethod.DELETE,
+                        entity,
+                        String.class
+                );
+                //query.delete(monitor + MEASUREMENTS);
+                result += response.getBody();
+                System.out.println("DBG: response body [" + response.getBody() + "]");
+                System.out.println("DBG: response status [" + response.getStatusCode() + "]");
 
-            System.out.println("DBG: response body [" + response.getBody() + "]");
-            System.out.println("DBG: response status [" + response.getStatusCode() + "]");
+                return new ResponseEntity<>(result, HttpStatus.OK);
+
+
+            } catch (Exception e) {
+
+            }
         }
 
-        return new ResponseEntity<>(result, HttpStatus.OK);
+        return new ResponseEntity<>(result, HttpStatus.INTERNAL_SERVER_ERROR);
     }
 }
